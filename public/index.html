@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Distributed Whiteboard</title>
+  <style>
+    #whiteboard {
+      border: 2px solid black;
+      cursor: crosshair;
+    }
+    .toolbox {
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+    }
+    .toolbox button {
+      margin-right: 10px;
+      background-color: #4CAF50; /* Green */
+      border: none;
+      color: white;
+      padding: 10px 20px;
+      text-align: center;
+      text-decoration: none;
+      font-size: 16px;
+      transition-duration: 0.4s;
+      cursor: pointer;
+      border-radius: 8px;
+    }
+    .toolbox button:hover {
+      background-color: #45a049;
+    }
+    .color-picker {
+      margin-left: 20px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="whiteboard" width="1450" height="500"></canvas>
+  <div class="toolbox">
+    <select id="toolSelector">
+      <option value="pen">Pen</option>
+      <option value="marker">Marker</option>
+      <option value="highlighter">Highlighter</option>
+    </select>
+    <input type="range" id="widthSelector" min="1" max="20" value="5">
+    <input type="color" id="colorSelector" value="#000000" class="color-picker">
+    <button id="eraserButton">Eraser</button>
+    <button id="clearButton">Clear</button>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+
+    const canvas = document.getElementById('whiteboard');
+    const ctx = canvas.getContext('2d');
+
+    let isDrawing = false;
+    let lastX = 0;
+    let lastY = 0;
+    let tool = 'pen';
+    let lineWidth = 5;
+    let color = '#000000';
+
+    // Event listeners for drawing
+    canvas.addEventListener('mousedown', startDrawing);
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', stopDrawing);
+    canvas.addEventListener('mouseout', stopDrawing);
+
+    function startDrawing(e) {
+      isDrawing = true;
+      [lastX, lastY] = [e.offsetX, e.offsetY];
+    }
+
+    function draw(e) {
+      if (!isDrawing) return;
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lineWidth;
+      ctx.lineCap = 'round';
+
+      if (tool === 'pen' || tool === 'eraser' || tool === 'marker' || tool === 'highlighter') {
+        drawPen(e.offsetX, e.offsetY);
+      }
+    }
+
+    function stopDrawing() {
+      isDrawing = false;
+    }
+
+    function drawPen(x, y) {
+      ctx.beginPath();
+      ctx.moveTo(lastX, lastY);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      lastX = x;
+      lastY = y;
+      if (isDrawing) {
+        socket.emit('draw', { tool, color, lineWidth, startX: lastX, startY: lastY, endX: x, endY: y });
+      }
+    }
+
+    // Handle clear button
+    document.getElementById('clearButton').addEventListener('click', () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      socket.emit('clear');
+    });
+
+    // Listen for clear events from server
+    socket.on('clear', () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    });
+
+    // Tool selection
+    document.getElementById('toolSelector').addEventListener('change', (e) => {
+      tool = e.target.value;
+    });
+
+    // Nib width selection
+    document.getElementById('widthSelector').addEventListener('input', (e) => {
+      lineWidth = e.target.value;
+    });
+
+    // Color selection
+    document.getElementById('colorSelector').addEventListener('input', (e) => {
+      color = e.target.value;
+    });
+
+    // Eraser button
+    document.getElementById('eraserButton').addEventListener('click', () => {
+      tool = tool === 'eraser' ? 'pen' : 'eraser';
+      if (tool === 'eraser') {
+        color = '#ffffff';
+        document.getElementById('eraserButton').style.backgroundColor = 'blue';
+      } else {
+        color = document.getElementById('colorSelector').value;
+        document.getElementById('eraserButton').style.backgroundColor = '';
+      }
+    });
+  </script>
+</body>
+</html>
